@@ -98,42 +98,19 @@ RUN mkdir -p /home/agor/.config/zellij && \
 WORKDIR /app
 
 # ============================================================================
-# Stage 2: Source Builder
-# ============================================================================
-FROM base AS builder
-
-USER root
-WORKDIR /app
-
-COPY . .
-
-ARG AGOR_BUILD_SHA=""
-ENV AGOR_BUILD_SHA=${AGOR_BUILD_SHA}
-
-RUN pnpm install --frozen-lockfile \
-  && bash packages/agor-live/build.sh --skip-install \
-  && npm install -g --prefix /opt/agor-runtime --ignore-scripts --no-audit --no-fund \
-       packages/agor-live/release/agor-live-client-*.tgz \
-       packages/agor-live/release/agor-live-[0-9]*.tgz
-
-# ============================================================================
-# Stage 3: Production Runtime (Final Target)
+# Stage 2: Production (Fast NPM install with fixed permissions)
 # ============================================================================
 FROM base AS production
 
 USER root
 
-COPY --chown=agor:agor --from=builder /opt/agor-runtime /opt/agor-runtime
-
-RUN ln -sf /opt/agor-runtime/bin/agor /usr/local/bin/agor \
-  && ln -sf /opt/agor-runtime/bin/agor-daemon /usr/local/bin/agor-daemon \
-  && chmod -R a+rX /opt/agor-runtime \
-  && chmod a+rx \
-       /opt/agor-runtime/lib/node_modules/agor-live/bin/agor.js \
-       /opt/agor-runtime/lib/node_modules/agor-live/bin/agor-daemon.js
+# Install agor-live from npm and ensure all static assets have proper read permissions
+RUN npm install -g agor-live@latest \
+  && chmod -R a+rX /usr/local/lib/node_modules/agor-live || true
 
 COPY docker/docker-entrypoint-prod.sh /usr/local/bin/
-RUN chmod +x /usr/local/bin/docker-entrypoint-prod.sh
+RUN chmod +x /usr/local/bin/docker-entrypoint-prod.sh \
+  && chown agor:agor /usr/local/bin/docker-entrypoint-prod.sh
 
 USER agor
 
